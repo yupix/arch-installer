@@ -36,7 +36,6 @@ ECHO_WHITE_COLOR="\033[1;37m"
 ECHO_COLOR_EXIT="\033[0;39m"
 #--------------------------------------------------------------------------------#
 
-
 #fdisk -l
 
 run_spinner() {
@@ -57,13 +56,16 @@ case $input_data in
 	timeout 10 dd if=/dev/zero of=/dev/sda bs=4M
 	sgdisk -n 1:0:+100M -t 1:ef00 -c 1:"EFI System" /dev/sda
 	sgdisk -n 2:0:+1024M -t 2:8300 -c 2:"Linux filesystem" /dev/sda
-	sgdisk -n 3:0: -t 3:8300 -c 3:"Linux filesystem" /dev/sda
+	sgdisk -n 3:0:+128G -t 2:8300 -c 3:"Linux filesystem" /dev/sda
+	sgdisk -n 4:0: -t 3:8300 -c 4:"Linux filesystem" /dev/sda
+
 	echo "Successful Create Partition"
 	spinner_progress_status="Starting a Format..."
 	run_spinner
 	mkfs.vfat -F32 /dev/sda1
-	mkfs.ext4 /dev/sda2
-	mkfs.ext4 /dev/sda3
+	mkfs.btrfs /dev/sda2
+	mkfs.btrfs /dev/sda3
+	mkfs.btrfs /dev/sda4
 	echo "Successful on Format"
 
 	spinner_progress_status="Starting a Format..."
@@ -72,6 +74,10 @@ case $input_data in
 	mount /dev/sda3 /mnt
 	mkdir /mnt/boot
 	mount /dev/sda2 /mnt/boot
+
+	mkdir /mnt/home
+	mount /dev/sda4 /mnt/home
+
 	mkdir /mnt/boot/efi
 	mount /dev/sda1 /mnt/boot/efi
 	echo "Successful on Mount..."
@@ -151,25 +157,38 @@ EOF
 		echo "Please Input Your Driver Name"
 
 		echo -e "Available:	\n   Host: amd nvidia intel\n   vm: virtualbox\n   other: custom none"
-		read -p ">" input_your_driver
-		case $input_your_driver in
-		[aA][mM][dD])
-			pacman -S xf86-video-amdgpu mesa-vdpau libva-vdpau-driver vulkan-radeon
+		read -p ">" input_your_driver_type
+		case $input_your_driver_type in
+
+		[hH][oO][sS][tT])
+			read -p ">" input_your_driver
+			case $input_your_driver in
+			[aA][mM][dD])
+				pacman -S xf86-video-amdgpu mesa-vdpau libva-vdpau-driver vulkan-radeon
+				break
+				;;
+			[nN][vV][dD][iI][aA])
+				pacman -S nvidia
+				break
+				;;
+			[iI][nN][tT][eE][lL])
+				pacman -S mesa xf86-video-intel
+				break
+				;;
+			esac
 			;;
-		[nN][vV][dD][iI][aA])
-			pacman -S nvidia
+
+		[vV][mM])
+			pacman -S open-vm-tools xf86-video-vmware
 			break
 			;;
-		[iI][nN][tT][eE][lL])
-			pacman -S mesa xf86-video-intel
-			break
-			;;
+
 		[cC][uU][sS][tT][uU][mM])
 			regular_arch_installer_version=$(echo "${ARCH_INSTALLER_VERSION}" | sed -e 's/\(.\)/\1./'g | sed -e 's/.$//')
 
 			while [[ -z "$custom_driver" ]]; do
 				custom_driver=$(
-					whiptail --backtitle "ArchLinux Installer v${regular_arch_installer_version}" --title "CUSTOM SELECT" --checklist "あなたが好きなお菓子は？" 0 0 0 \
+					whiptail --backtitle "ArchLinux Installer v${regular_arch_installer_version}" --title "CUSTOM SELECT" --checklist "Select Your Driver" 0 0 0 \
 						"AMD" "" OFF \
 						"INTEL" "" OFF \
 						"NVIDIA" "" OFF 3>&1 1>&2 2>&3
@@ -180,7 +199,7 @@ EOF
 			custom_driver=$(echo "$custom_driver" | sed "s/\"//g")
 
 			echo $custom_driver
-			exit
+			
 			if [[ $custom_driver = "AMD" ]]; then
 				pacman -S mesa vulkan-radeon libva-mesa-driver mesa-vdpau
 			elif [[ $custom_driver = "INTEL" ]]; then
@@ -198,13 +217,13 @@ EOF
 			elif [[ $custom_driver = "AMD INTEL NVIDIA" ]]; then
 				pacman -S mesa vulkan-radeon libva-mesa-driver mesa-vdpau xf86-video-intel vulkan-intel nvidia
 			fi
-
 			break
 			;;
 		esac
 	done
-	pacman -S plasma-meta aria2 adobe-source-han-sans-jp-fonts adobe-source-han-serif-jp-fonts ntfs-3g nemo discord
+	pacman -S plasma-meta cinamon aria2 adobe-source-han-sans-jp-fonts adobe-source-han-serif-jp-fonts ntfs-3g nemo discord konsole
 	sddm --example-config >/etc/sddm.conf
+	systemctl enable sddm
 	echo "Please Input Your like Login Theme"
 	;;
 3)
